@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>みんなを笑顔にするドラムロールアプリ - Figma Make プロトタイプ再現</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .animate-pulse-ring {
+      animation: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes drum-vibe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+    .animate-drum-vibe {
+      animation: drum-vibe 0.15s ease-in-out infinite;
+    }
+    /* Fixed layout container to guarantee zero layout shift (Article Ver 9) */
+    .status-panel-slot {
+      height: 96px;
+      min-height: 96px;
+      max-height: 96px;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between selection:bg-amber-200">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="text-2xl">🥁</span>
+        <div>
+          <h1 class="text-base font-bold leading-tight text-slate-900">ドラムロールアプリ</h1>
+          <p class="text-[11px] text-slate-500 font-medium">みんなを笑顔にするプロトタイプ</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <button id="info-modal-btn" type="button" class="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md transition-colors flex items-center gap-1">
+          <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          検証ポイント
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-xl w-full mx-auto p-4 flex flex-col gap-4">
+
+    <!-- Sound Source Mode Switcher Card -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">音源モード選択</span>
+        <span id="active-mode-badge" class="px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+          Web Audio シンセ音源
+        </span>
+      </div>
+      <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg">
+        <button id="mode-synth-btn" type="button" class="py-1.5 px-3 rounded-md text-xs font-medium transition-all shadow-sm bg-white text-slate-900 border border-slate-200">
+          ✨ プリセット音源
+        </button>
+        <button id="mode-custom-btn" type="button" class="py-1.5 px-3 rounded-md text-xs font-medium transition-all text-slate-600 hover:text-slate-900">
+          📁 音源アップロード
+        </button>
+      </div>
+
+      <!-- Upload Drawer (Hidden by default in Preset mode) -->
+      <div id="upload-panel" class="hidden mt-3 pt-3 border-t border-slate-100 text-xs flex flex-col gap-2.5">
+        <p class="text-[11px] text-slate-500 leading-relaxed">
+          お手元の音声ファイル（MP3 / WAV / M4A）を各スロットに読み込んで使えます。<br>
+          <span class="text-slate-400">※記事 Ver 2~3 の仕様：ファイルを選択すると即座に再生可能になります。</span>
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <!-- Drumroll Upload -->
+          <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-700 flex items-center gap-1">🥁 ドラムロール音源</span>
+              <span id="drum-file-status" class="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">未設定</span>
+            </div>
+            <label class="cursor-pointer inline-flex items-center justify-center px-2 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-xs transition-colors">
+              <span>ファイルを選択</span>
+              <input id="drum-file-input" type="file" accept="audio/*" class="hidden">
+            </label>
+            <div id="drum-file-name" class="text-[10px] text-slate-500 truncate">未アップロード</div>
+          </div>
+
+          <!-- Cymbal Upload -->
+          <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-700 flex items-center gap-1">💥 シンバル音源</span>
+              <span id="cymbal-file-status" class="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">未設定</span>
+            </div>
+            <label class="cursor-pointer inline-flex items-center justify-center px-2 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-xs transition-colors">
+              <span>ファイルを選択</span>
+              <input id="cymbal-file-input" type="file" accept="audio/*" class="hidden">
+            </label>
+            <div id="cymbal-file-name" class="text-[10px] text-slate-500 truncate">未アップロード</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visualizer & Fixed Status Monitor (Guarantees Ver 9 Zero Layout Shift) -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between status-panel-slot">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span id="playback-indicator-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300 transition-colors"></span>
+          <span id="playback-state-text" class="text-xs font-bold text-slate-600">待機中 (Ready)</span>
+        </div>
+        <div id="countdown-display" class="text-xs font-mono font-semibold text-slate-600">
+          残り時間: <span id="countdown-num">--.-</span>s
+        </div>
+      </div>
+
+      <!-- Live Audio Waveform Canvas -->
+      <div class="relative w-full h-5 bg-slate-100 rounded overflow-hidden">
+        <canvas id="visualizer-canvas" class="w-full h-full block" width="500" height="24"></canvas>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+        <div id="playback-progress-bar" class="bg-amber-500 h-2 rounded-full w-0 transition-all duration-100"></div>
+      </div>
+    </section>
+
+    <!-- Action Stage (Fitts's Law: High-Stakes Big Buttons) -->
+    <section class="flex flex-col gap-3">
+      <!-- Drumroll Main Button -->
+      <button id="btn-drumroll" type="button" class="group relative w-full h-28 sm:h-32 rounded-2xl bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-450 hover:to-amber-550 active:from-amber-600 active:to-amber-700 text-white shadow-md hover:shadow-lg active:scale-[0.985] transition-all flex flex-col items-center justify-center p-3 select-none border-2 border-amber-400 focus:outline-none focus:ring-4 focus:ring-amber-300">
+        <div class="flex items-center gap-2">
+          <span class="text-3xl sm:text-4xl filter drop-shadow">🥁</span>
+          <span class="text-2xl sm:text-3xl font-extrabold tracking-wide drop-shadow">ドラムロール</span>
+        </div>
+        <div class="flex items-center gap-1.5 mt-1.5 text-amber-100 text-xs font-medium">
+          <span id="drumroll-status-subtext">タップで開始 / ループ再生</span>
+          <span class="inline-block px-1.5 py-0.5 rounded bg-black/20 text-[10px] font-mono border border-white/20">[Space] / [D]</span>
+        </div>
+      </button>
+
+      <!-- Cymbal Punch Button (Article Ver 18 & 19 0.5s Natural Cross-fade) -->
+      <button id="btn-cymbal" type="button" class="group relative w-full h-24 sm:h-28 rounded-2xl bg-gradient-to-b from-rose-500 to-rose-600 hover:from-rose-450 hover:to-rose-550 active:from-rose-600 active:to-rose-700 text-white shadow-md hover:shadow-lg active:scale-[0.985] transition-all flex flex-col items-center justify-center p-3 select-none border-2 border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-300">
+        <div class="flex items-center gap-2">
+          <span class="text-3xl sm:text-4xl filter drop-shadow">💥</span>
+          <span class="text-2xl sm:text-3xl font-extrabold tracking-wide drop-shadow">シンバル！</span>
+        </div>
+        <div class="flex items-center gap-1.5 mt-1 text-rose-100 text-xs font-medium">
+          <span>0.5秒フェード切り替え (発表の瞬間にタップ)</span>
+          <span class="inline-block px-1.5 py-0.5 rounded bg-black/20 text-[10px] font-mono border border-white/20">[Enter] / [C]</span>
+        </div>
+      </button>
+
+      <!-- Stop Button -->
+      <div class="grid grid-cols-2 gap-2 mt-1">
+        <button id="btn-stop" type="button" class="h-12 rounded-xl bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-700 font-bold text-sm shadow-sm transition-all flex items-center justify-center gap-2 select-none border border-slate-300">
+          <svg class="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/></svg>
+          <span>すべて停止</span>
+          <span class="text-[10px] text-slate-500 font-mono bg-white/60 px-1 py-0.5 rounded">[Esc]</span>
+        </button>
+
+        <!-- Toggle Controls Drawer -->
+        <button id="btn-toggle-settings" type="button" class="h-12 rounded-xl bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 font-semibold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 border border-slate-200">
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span>音響・間（ま）の調整</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Settings Drawer -->
+    <section id="settings-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col gap-3">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h2 class="text-xs font-bold text-slate-800">音響パラメータ設定 (記事 Ver 18~20 検証項目)</h2>
+        <button id="reset-settings-btn" type="button" class="text-[11px] text-amber-600 hover:text-amber-700 underline">リセット</button>
+      </div>
+
+      <!-- Cross-fade duration slider -->
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-medium text-slate-700">切り替えフェードアウト時間</span>
+          <span id="fade-duration-val" class="font-mono font-bold text-amber-600">0.5秒 (推奨値)</span>
+        </div>
+        <input id="fade-duration-slider" type="range" min="0.1" max="1.5" step="0.1" value="0.5" class="w-full accent-amber-500 cursor-pointer">
+        <p class="text-[10px] text-slate-500">※記事で検証された「ドラムの余韻が自然に残る最適値＝0.5秒」</p>
+      </div>
+
+      <!-- Master volume slider -->
+      <div class="flex flex-col gap-1 pt-2 border-t border-slate-100">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-medium text-slate-700">マスター音量</span>
+          <span id="volume-val" class="font-mono font-bold text-slate-700">80%</span>
+        </div>
+        <input id="volume-slider" type="range" min="0" max="100" step="1" value="80" class="w-full accent-slate-600 cursor-pointer">
+      </div>
+    </section>
+
+    <!-- Keyboard Shortcuts Guide Card (Author's wishlist addressed) -->
+    <section class="bg-amber-50/60 rounded-xl border border-amber-200/70 p-3 text-xs flex flex-col gap-2">
+      <div class="flex items-center gap-1.5 font-bold text-amber-900">
+        <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        <span>ステージ本番でのキーボードショートカット</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center text-[11px]">
+        <div class="bg-white/80 p-1.5 rounded border border-amber-200/50">
+          <div class="font-mono font-bold text-slate-800">[Space] / [D]</div>
+          <div class="text-[10px] text-slate-600">ドラムロール開始</div>
+        </div>
+        <div class="bg-white/80 p-1.5 rounded border border-amber-200/50">
+          <div class="font-mono font-bold text-slate-800">[Enter] / [C]</div>
+          <div class="text-[10px] text-slate-600">シンバル発声！</div>
+        </div>
+        <div class="bg-white/80 p-1.5 rounded border border-amber-200/50">
+          <div class="font-mono font-bold text-slate-800">[Esc] / [S]</div>
+          <div class="text-[10px] text-slate-600">即時停止</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: Article Prototype Learnings -->
+  <div id="info-modal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-slate-200 flex flex-col gap-4 text-xs leading-relaxed">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🥁</span>
+          <h3 class="text-sm font-bold text-slate-900">記事の検証プロセスとアプリ設計</h3>
+        </div>
+        <button id="info-modal-close" type="button" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-slate-700">
+        <div class="p-3 bg-amber-50 rounded-lg border border-amber-200">
+          <h4 class="font-bold text-amber-900 mb-1">1. 解決したかった課題（ペイン）</h4>
+          <p class="text-[11px] text-amber-800">
+            YouTube等の音源はドラムロールとシンバルが一体化しており、発表者の間や会場のウケに合わせてシンバルを鳴らすタイミングをコントロールできませんでした。本アプリは<strong>「任意のタイミングでシンバルに切り替えられる柔軟なインターフェース」</strong>を実現します。
+          </p>
+        </div>
+
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <h4 class="font-bold text-slate-900 mb-1">2. 0.5秒クロスフェード（Ver 18〜19）</h4>
+          <p class="text-[11px] text-slate-600">
+            ドラムロールを急停止してシンバルを鳴らすと、ドラムの余韻が消えて不自然でした。シンバルを叩いた瞬間にドラムロールを0.5秒かけてフェードアウトさせることで、現実のステージと同じ臨場感ある音響体験を実現しています。
+          </p>
+        </div>
+
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <h4 class="font-bold text-slate-900 mb-1">3. レイアウトの安定性（Ver 9）</h4>
+          <p class="text-[11px] text-slate-600">
+            再生開始時に残り時間やプログレスバーが表示されてボタンの位置がズレると、緊張したステージで押し間違いが発生します。表示領域の高さを事前に固定確保し、ゼロレイアウトシフトを徹底しています。
+          </p>
+        </div>
+
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <h4 class="font-bold text-slate-900 mb-1">4. フィッツの法則とキーボード操作</h4>
+          <p class="text-[11px] text-slate-600">
+            咄嗟の操作でも失敗しない超巨大ボタン設計に加え、記事の最後に著者が「キーボードで操作できればよかった」と言及していた要望を完全反映しました。
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-2 text-right">
+        <button id="info-modal-confirm" type="button" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-xs transition-colors">
+          閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="py-3 text-center text-[11px] text-slate-400 border-t border-slate-200 bg-white">
+    <p>Inspired by hott3's Figma Make Drumroll App Article</p>
+  </footer>
+
+  <!-- Application Logic -->
+  <script>
+    (function () {
+      'use strict';
+
+      // State Management
+      let audioCtx = null;
+      let masterGainNode = null;
+      let analyserNode = null;
+      let visualizerAnimationId = null;
+
+      // Audio Nodes for active playback
+      let drumrollGainNode = null;
+      let drumrollSourceNodes = [];
+      let isDrumrollPlaying = false;
+      let drumrollStartTime = 0;
+      let drumrollTimerInterval = null;
+
+      let cymbalGainNode = null;
+      let cymbalSourceNodes = [];
+      let isCymbalPlaying = false;
+      let cymbalStartTime = 0;
+      let cymbalTimerInterval = null;
+
+      // Mode: 'synth' (Web Audio) | 'custom' (Uploaded files)
+      let currentMode = 'synth';
+
+      // Custom Upload Buffers
+      let customDrumBuffer = null;
+      let customCymbalBuffer = null;
+
+      // Parameters
+      let fadeOutDuration = 0.5; // Ver 18/19 validated value: 0.5s
+      let masterVolume = 0.8;
+
+      // DOM Elements
+      const modeSynthBtn = document.getElementById('mode-synth-btn');
+      const modeCustomBtn = document.getElementById('mode-custom-btn');
+      const uploadPanel = document.getElementById('upload-panel');
+      const activeModeBadge = document.getElementById('active-mode-badge');
+
+      const drumFileInput = document.getElementById('drum-file-input');
+      const drumFileName = document.getElementById('drum-file-name');
+      const drumFileStatus = document.getElementById('drum-file-status');
+
+      const cymbalFileInput = document.getElementById('cymbal-file-input');
+      const cymbalFileName = document.getElementById('cymbal-file-name');
+      const cymbalFileStatus = document.getElementById('cymbal-file-status');
+
+      const btnDrumroll = document.getElementById('btn-drumroll');
+      const btnCymbal = document.getElementById('btn-cymbal');
+      const btnStop = document.getElementById('btn-stop');
+      const drumrollStatusSubtext = document.getElementById('drumroll-status-subtext');
+
+      const playbackIndicatorDot = document.getElementById('playback-indicator-dot');
+      const playbackStateText = document.getElementById('playback-state-text');
+      const countdownDisplay = document.getElementById('countdown-display');
+      const countdownNum = document.getElementById('countdown-num');
+      const playbackProgressBar = document.getElementById('playback-progress-bar');
+      const visualizerCanvas = document.getElementById('visualizer-canvas');
+      const canvasCtx = visualizerCanvas.getContext('2d');
+
+      const btnToggleSettings = document.getElementById('btn-toggle-settings');
+      const settingsPanel = document.getElementById('settings-panel');
+      const fadeDurationSlider = document.getElementById('fade-duration-slider');
+      const fadeDurationVal = document.getElementById('fade-duration-val');
+      const volumeSlider = document.getElementById('volume-slider');
+      const volumeVal = document.getElementById('volume-val');
+      const resetSettingsBtn = document.getElementById('reset-settings-btn');
+
+      const infoModalBtn = document.getElementById('info-modal-btn');
+      const infoModal = document.getElementById('info-modal');
+      const infoModalClose = document.getElementById('info-modal-close');
+      const infoModalConfirm = document.getElementById('info-modal-confirm');
+
+      // Initialize Web Audio Context on first interaction
+      function getAudioContext() {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+
+          masterGainNode = audioCtx.createGain();
+          masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+
+          analyserNode = audioCtx.createAnalyser();
+          analyserNode.fftSize = 64;
+
+          masterGainNode.connect(analyserNode);
+          analyserNode.connect(audioCtx.destination);
+
+          startVisualizer();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        return audioCtx;
+      }
+
+      // Visualizer loop
+      function startVisualizer() {
+        if (visualizerAnimationId) return;
+        const bufferLength = analyserNode.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        function draw() {
+          visualizerAnimationId = requestAnimationFrame(draw);
+          analyserNode.getByteFrequencyData(dataArray);
+
+          const width = visualizerCanvas.width;
+          const height = visualizerCanvas.height;
+
+          canvasCtx.clearRect(0, 0, width, height);
+
+          const barWidth = (width / bufferLength) * 1.5;
+          let barHeight;
+          let x = 0;
+
+          for (let i = 0; i < bufferLength; i++) {
+            barHeight = (dataArray[i] / 255) * height;
+
+            if (isDrumrollPlaying) {
+              canvasCtx.fillStyle = '#f59e0b'; // amber-500
+            } else if (isCymbalPlaying) {
+              canvasCtx.fillStyle = '#f43f5e'; // rose-500
+            } else {
+              canvasCtx.fillStyle = '#cbd5e1'; // slate-300
+            }
+
+            canvasCtx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+            x += barWidth;
+          }
+        }
+        draw();
+      }
+
+      // Web Audio Synthesizer: Snare Drumroll
+      // Generates an acoustic snare roll with rapid strokes and shell resonance
+      function createSynthDrumrollSource(ctx) {
+        // Master gain for this drumroll instance
+        const rollGain = ctx.createGain();
+        rollGain.gain.setValueAtTime(0.001, ctx.currentTime);
+        // Fast attack to full volume
+        rollGain.gain.exponentialRampToValueAtTime(0.9, ctx.currentTime + 0.05);
+
+        // 1. Noise generator for snare wire rattle
+        const bufferSize = ctx.sampleRate * 2;
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+
+        const whiteNoise = ctx.createBufferSource();
+        whiteNoise.buffer = noiseBuffer;
+        whiteNoise.loop = true;
+
+        // Snare rattle filter (bandpass ~1800Hz)
+        const snareFilter = ctx.createBiquadFilter();
+        snareFilter.type = 'bandpass';
+        snareFilter.frequency.setValueAtTime(1800, ctx.currentTime);
+        snareFilter.Q.setValueAtTime(1.2, ctx.currentTime);
+
+        // Tremolo / Drum stick stroke modulation (~22 Hz roll tempo)
+        const tremoloGain = ctx.createGain();
+        const lfo = ctx.createOscillator();
+        lfo.frequency.setValueAtTime(22, ctx.currentTime); // 22 strokes/sec
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.setValueAtTime(0.35, ctx.currentTime);
+        lfo.connect(lfoGain);
+        lfoGain.connect(tremoloGain.gain);
+
+        whiteNoise.connect(snareFilter);
+        snareFilter.connect(tremoloGain);
+        tremoloGain.connect(rollGain);
+
+        // 2. Snare drum shell body resonance (~190Hz low punch)
+        const shellOsc = ctx.createOscillator();
+        shellOsc.type = 'triangle';
+        shellOsc.frequency.setValueAtTime(190, ctx.currentTime);
+        const shellGain = ctx.createGain();
+        shellGain.gain.setValueAtTime(0.25, ctx.currentTime);
+
+        shellOsc.connect(shellGain);
+        shellGain.connect(rollGain);
+
+        rollGain.connect(masterGainNode);
+
+        whiteNoise.start();
+        lfo.start();
+        shellOsc.start();
+
+        return {
+          gainNode: rollGain,
+          sources: [whiteNoise, lfo, shellOsc]
+        };
+      }
+
+      // Web Audio Synthesizer: Crash Cymbal
+      // Realistic metallic crash burst with exponential acoustic decay
+      function playSynthCymbal(ctx) {
+        const cymbalGain = ctx.createGain();
+        cymbalGain.gain.setValueAtTime(1.0, ctx.currentTime);
+        // Exponential decay over 3.0 seconds
+        cymbalGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 3.0);
+
+        // Metallic multi-oscillator cluster
+        const frequencies = [298.5, 342.3, 411.2, 543.8, 678.9, 834.1];
+        const oscGain = ctx.createGain();
+        oscGain.gain.setValueAtTime(0.4, ctx.currentTime);
+
+        const bandpass = ctx.createBiquadFilter();
+        bandpass.type = 'bandpass';
+        bandpass.frequency.setValueAtTime(7500, ctx.currentTime);
+        bandpass.Q.setValueAtTime(2.5, ctx.currentTime);
+
+        const sources = [];
+        frequencies.forEach(f => {
+          const osc = ctx.createOscillator();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(f, ctx.currentTime);
+          osc.connect(oscGain);
+          sources.push(osc);
+          osc.start();
+          osc.stop(ctx.currentTime + 3.2);
+        });
+
+        // High frequency noise burst
+        const bufferSize = ctx.sampleRate * 3;
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+
+        const highpass = ctx.createBiquadFilter();
+        highpass.type = 'highpass';
+        highpass.frequency.setValueAtTime(5000, ctx.currentTime);
+
+        noise.connect(highpass);
+        highpass.connect(cymbalGain);
+
+        oscGain.connect(bandpass);
+        bandpass.connect(cymbalGain);
+
+        cymbalGain.connect(masterGainNode);
+
+        noise.start();
+        noise.stop(ctx.currentTime + 3.2);
+        sources.push(noise);
+
+        return {
+          gainNode: cymbalGain,
+          sources: sources
+        };
+      }
+
+      // Custom Buffer Playback Helper
+      function playBufferAudio(ctx, buffer, isLoop) {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = isLoop;
+
+        const gainNode = ctx.createGain();
+        gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
+
+        source.connect(gainNode);
+        gainNode.connect(masterGainNode);
+
+        source.start();
+
+        return {
+          gainNode: gainNode,
+          sources: [source]
+        };
+      }
+
+      // Stop Drumroll with optional fadeout
+      function stopDrumroll(fadeDuration = 0) {
+        if (!isDrumrollPlaying) return;
+
+        clearInterval(drumrollTimerInterval);
+        drumrollTimerInterval = null;
+
+        const ctx = getAudioContext();
+        if (drumrollGainNode) {
+          if (fadeDuration > 0) {
+            // Natural acoustic fadeout (Ver 18 & 19)
+            try {
+              drumrollGainNode.gain.cancelScheduledValues(ctx.currentTime);
+              drumrollGainNode.gain.setValueAtTime(drumrollGainNode.gain.value, ctx.currentTime);
+              drumrollGainNode.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + fadeDuration);
+            } catch (e) {
+              console.warn(e);
+            }
+            const nodesToStop = drumrollSourceNodes;
+            setTimeout(() => {
+              nodesToStop.forEach(src => {
+                try { src.stop(); src.disconnect(); } catch (err) {}
+              });
+            }, fadeDuration * 1000 + 50);
+          } else {
+            drumrollGainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+            drumrollSourceNodes.forEach(src => {
+              try { src.stop(); src.disconnect(); } catch (err) {}
+            });
+          }
+        }
+
+        drumrollSourceNodes = [];
+        drumrollGainNode = null;
+        isDrumrollPlaying = false;
+        btnDrumroll.classList.remove('ring-4', 'ring-amber-300', 'animate-pulse-ring');
+        drumrollStatusSubtext.textContent = 'タップで開始 / ループ再生';
+      }
+
+      // Stop Cymbal
+      function stopCymbal(fadeDuration = 0) {
+        if (!isCymbalPlaying) return;
+
+        clearInterval(cymbalTimerInterval);
+        cymbalTimerInterval = null;
+
+        const ctx = getAudioContext();
+        if (cymbalGainNode) {
+          if (fadeDuration > 0) {
+            try {
+              cymbalGainNode.gain.cancelScheduledValues(ctx.currentTime);
+              cymbalGainNode.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + fadeDuration);
+            } catch (e) {}
+            const nodesToStop = cymbalSourceNodes;
+            setTimeout(() => {
+              nodesToStop.forEach(src => {
+                try { src.stop(); src.disconnect(); } catch (err) {}
+              });
+            }, fadeDuration * 1000 + 50);
+          } else {
+            cymbalGainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+            cymbalSourceNodes.forEach(src => {
+              try { src.stop(); src.disconnect(); } catch (err) {}
+            });
+          }
+        }
+
+        cymbalSourceNodes = [];
+        cymbalGainNode = null;
+        isCymbalPlaying = false;
+        btnCymbal.classList.remove('ring-4', 'ring-rose-300');
+      }
+
+      // Start Drumroll Action
+      function triggerDrumroll() {
+        const ctx = getAudioContext();
+
+        // If drumroll is already playing, stop it
+        if (isDrumrollPlaying) {
+          stopDrumroll(0.1);
+          updateMonitorUI('待機中', false, 0);
+          return;
+        }
+
+        // If cymbal is playing, stop it
+        if (isCymbalPlaying) {
+          stopCymbal(0.1);
+        }
+
+        // Check if custom audio is loaded when in custom mode
+        if (currentMode === 'custom' && !customDrumBuffer) {
+          updateMonitorUI('ドラム音源ファイルを選択してください', false, 0);
+          return;
+        }
+
+        isDrumrollPlaying = true;
+        drumrollStartTime = ctx.currentTime;
+        btnDrumroll.classList.add('ring-4', 'ring-amber-300', 'animate-pulse-ring');
+        drumrollStatusSubtext.textContent = '再生中... (タップまたは[C]でシンバル)';
+
+        if (currentMode === 'synth') {
+          const synth = createSynthDrumrollSource(ctx);
+          drumrollGainNode = synth.gainNode;
+          drumrollSourceNodes = synth.sources;
+
+          // Continuous roll monitor
+          updateMonitorUI('🥁 ドラムロール再生中 (ループ)', true, null);
+          let elapsedSec = 0;
+          drumrollTimerInterval = setInterval(() => {
+            if (!isDrumrollPlaying) return;
+            elapsedSec += 0.1;
+            countdownNum.textContent = elapsedSec.toFixed(1);
+            countdownDisplay.innerHTML = '経過時間: <span class="font-bold text-amber-600">' + elapsedSec.toFixed(1) + '</span>s';
+            // Pulsing progress bar
+            const cycle = (elapsedSec % 2) / 2;
+            playbackProgressBar.style.width = (cycle * 100) + '%';
+          }, 100);
+
+        } else {
+          // Play uploaded custom drumroll
+          const custom = playBufferAudio(ctx, customDrumBuffer, false);
+          drumrollGainNode = custom.gainNode;
+          drumrollSourceNodes = custom.sources;
+
+          const totalDuration = customDrumBuffer.duration;
+          updateMonitorUI('🥁 ドラムロール再生中', true, totalDuration);
+
+          drumrollTimerInterval = setInterval(() => {
+            if (!isDrumrollPlaying) return;
+            const elapsed = ctx.currentTime - drumrollStartTime;
+            const remaining = Math.max(0, totalDuration - elapsed);
+            countdownNum.textContent = remaining.toFixed(1);
+            countdownDisplay.innerHTML = '残り時間: <span class="font-bold text-amber-600">' + remaining.toFixed(1) + '</span>s';
+            const pct = Math.min(100, (elapsed / totalDuration) * 100);
+            playbackProgressBar.style.width = pct + '%';
+
+            if (remaining <= 0) {
+              stopDrumroll(0);
+              updateMonitorUI('ドラムロール終了', false, 0);
+            }
+          }, 100);
+        }
+      }
+
+      // Trigger Cymbal Action (Ver 18 & 19 Cross-fade Logic)
+      function triggerCymbal() {
+        const ctx = getAudioContext();
+
+        // CRUCIAL ARTICLE VER 18-19 IMPLEMENTATION:
+        // If drumroll is playing, initiate fadeout over 0.5s (or user configured duration)
+        // AND start cymbal IMMEDIATELY at the exact same moment!
+        if (isDrumrollPlaying) {
+          stopDrumroll(fadeOutDuration);
+        }
+
+        // If another cymbal sound is playing, smoothly cut previous
+        if (isCymbalPlaying) {
+          stopCymbal(0.05);
+        }
+
+        if (currentMode === 'custom' && !customCymbalBuffer) {
+          updateMonitorUI('シンバル音源ファイルを選択してください', false, 0);
+          return;
+        }
+
+        isCymbalPlaying = true;
+        cymbalStartTime = ctx.currentTime;
+        btnCymbal.classList.add('ring-4', 'ring-rose-300');
+
+        let cymbalDuration = 3.0;
+
+        if (currentMode === 'synth') {
+          const synth = playSynthCymbal(ctx);
+          cymbalGainNode = synth.gainNode;
+          cymbalSourceNodes = synth.sources;
+        } else {
+          const custom = playBufferAudio(ctx, customCymbalBuffer, false);
+          cymbalGainNode = custom.gainNode;
+          cymbalSourceNodes = custom.sources;
+          cymbalDuration = customCymbalBuffer.duration;
+        }
+
+        updateMonitorUI('💥 ジャーン！(シンバル)', true, cymbalDuration);
+
+        cymbalTimerInterval = setInterval(() => {
+          if (!isCymbalPlaying) return;
+          const elapsed = ctx.currentTime - cymbalStartTime;
+          const remaining = Math.max(0, cymbalDuration - elapsed);
+          countdownNum.textContent = remaining.toFixed(1);
+          countdownDisplay.innerHTML = '余韻残り: <span class="font-bold text-rose-600">' + remaining.toFixed(1) + '</span>s';
+          const pct = Math.min(100, (elapsed / cymbalDuration) * 100);
+          playbackProgressBar.style.width = (100 - pct) + '%';
+
+          if (remaining <= 0) {
+            stopCymbal(0);
+            updateMonitorUI('待機中 (Ready)', false, 0);
+          }
+        }, 100);
+      }
+
+      // Stop All Action
+      function triggerStopAll() {
+        stopDrumroll(0.1);
+        stopCymbal(0.1);
+        updateMonitorUI('停止しました', false, 0);
+      }
+
+      // Update Monitor Status Bar (Guarantees zero layout shift)
+      function updateMonitorUI(statusText, isActive, totalDuration) {
+        playbackStateText.textContent = statusText;
+
+        if (isActive) {
+          playbackIndicatorDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping';
+          if (isDrumrollPlaying) {
+            playbackProgressBar.className = 'bg-amber-500 h-2 rounded-full transition-all duration-100';
+          } else {
+            playbackProgressBar.className = 'bg-rose-500 h-2 rounded-full transition-all duration-100';
+          }
+        } else {
+          playbackIndicatorDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-300 transition-colors';
+          playbackProgressBar.style.width = '0%';
+          countdownDisplay.innerHTML = '残り時間: <span id="countdown-num">--.-</span>s';
+        }
+      }
+
+      // Audio File Decoding Handler
+      function handleFileUpload(file, isDrum) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const arrayBuffer = e.target.result;
+          const ctx = getAudioContext();
+          ctx.decodeAudioData(arrayBuffer, function (decodedBuffer) {
+            if (isDrum) {
+              customDrumBuffer = decodedBuffer;
+              drumFileName.textContent = file.name + ' (' + decodedBuffer.duration.toFixed(1) + 's)';
+              drumFileStatus.textContent = '準備完了';
+              drumFileStatus.className = 'text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-300';
+            } else {
+              customCymbalBuffer = decodedBuffer;
+              cymbalFileName.textContent = file.name + ' (' + decodedBuffer.duration.toFixed(1) + 's)';
+              cymbalFileStatus.textContent = '準備完了';
+              cymbalFileStatus.className = 'text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-300';
+            }
+            updateButtonReadiness();
+          }, function (err) {
+            console.error('Audio decode error', err);
+            const statusEl = isDrum ? drumFileStatus : cymbalFileStatus;
+            statusEl.textContent = 'エラー';
+            statusEl.className = 'text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-300';
+          });
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      // Update button visual readiness based on selected mode & uploads
+      function updateButtonReadiness() {
+        if (currentMode === 'custom') {
+          // If custom mode is active and drum is not loaded, show indicator
+          if (!customDrumBuffer) {
+            btnDrumroll.classList.add('opacity-75');
+            drumrollStatusSubtext.textContent = '音源ファイル未設定';
+          } else {
+            btnDrumroll.classList.remove('opacity-75');
+            drumrollStatusSubtext.textContent = 'タップで開始 (' + customDrumBuffer.duration.toFixed(1) + 's)';
+          }
+
+          if (!customCymbalBuffer) {
+            btnCymbal.classList.add('opacity-75');
+          } else {
+            btnCymbal.classList.remove('opacity-75');
+          }
+        } else {
+          btnDrumroll.classList.remove('opacity-75');
+          btnCymbal.classList.remove('opacity-75');
+          drumrollStatusSubtext.textContent = 'タップで開始 / ループ再生';
+        }
+      }
+
+      // Event Listeners: Mode Switching
+      modeSynthBtn.addEventListener('click', function () {
+        currentMode = 'synth';
+        modeSynthBtn.className = 'py-1.5 px-3 rounded-md text-xs font-medium transition-all shadow-sm bg-white text-slate-900 border border-slate-200';
+        modeCustomBtn.className = 'py-1.5 px-3 rounded-md text-xs font-medium transition-all text-slate-600 hover:text-slate-900';
+        uploadPanel.classList.add('hidden');
+        activeModeBadge.textContent = 'Web Audio シンセ音源';
+        activeModeBadge.className = 'px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full';
+        updateButtonReadiness();
+      });
+
+      modeCustomBtn.addEventListener('click', function () {
+        currentMode = 'custom';
+        modeCustomBtn.className = 'py-1.5 px-3 rounded-md text-xs font-medium transition-all shadow-sm bg-white text-slate-900 border border-slate-200';
+        modeSynthBtn.className = 'py-1.5 px-3 rounded-md text-xs font-medium transition-all text-slate-600 hover:text-slate-900';
+        uploadPanel.classList.remove('hidden');
+        activeModeBadge.textContent = 'カスタム音源モード';
+        activeModeBadge.className = 'px-2 py-0.5 text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full';
+        updateButtonReadiness();
+      });
+
+      // File Inputs
+      drumFileInput.addEventListener('change', function (e) {
+        if (e.target.files && e.target.files[0]) {
+          handleFileUpload(e.target.files[0], true);
+        }
+      });
+
+      cymbalFileInput.addEventListener('change', function (e) {
+        if (e.target.files && e.target.files[0]) {
+          handleFileUpload(e.target.files[0], false);
+        }
+      });
+
+      // Playback Buttons
+      btnDrumroll.addEventListener('click', triggerDrumroll);
+      btnCymbal.addEventListener('click', triggerCymbal);
+      btnStop.addEventListener('click', triggerStopAll);
+
+      // Settings Drawer
+      btnToggleSettings.addEventListener('click', function () {
+        settingsPanel.classList.toggle('hidden');
+      });
+
+      fadeDurationSlider.addEventListener('input', function (e) {
+        fadeOutDuration = parseFloat(e.target.value);
+        fadeDurationVal.textContent = fadeOutDuration.toFixed(1) + '秒' + (fadeOutDuration === 0.5 ? ' (推奨値)' : '');
+      });
+
+      volumeSlider.addEventListener('input', function (e) {
+        const val = parseInt(e.target.value, 10);
+        masterVolume = val / 100;
+        volumeVal.textContent = val + '%';
+        if (masterGainNode && audioCtx) {
+          masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+        }
+      });
+
+      resetSettingsBtn.addEventListener('click', function () {
+        fadeOutDuration = 0.5;
+        fadeDurationSlider.value = '0.5';
+        fadeDurationVal.textContent = '0.5秒 (推奨値)';
+
+        masterVolume = 0.8;
+        volumeSlider.value = '80';
+        volumeVal.textContent = '80%';
+        if (masterGainNode && audioCtx) {
+          masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+        }
+      });
+
+      // Modal Controls
+      infoModalBtn.addEventListener('click', function () {
+        infoModal.classList.remove('hidden');
+      });
+      infoModalClose.addEventListener('click', function () {
+        infoModal.classList.add('hidden');
+      });
+      infoModalConfirm.addEventListener('click', function () {
+        infoModal.classList.add('hidden');
+      });
+
+      // Keyboard Controls (Requested improvement in author's retrospective)
+      window.addEventListener('keydown', function (e) {
+        // Ignore if user is interacting with form controls
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        const key = e.key.toLowerCase();
+        if (key === ' ' || key === 'd') {
+          e.preventDefault();
+          triggerDrumroll();
+        } else if (key === 'enter' || key === 'c') {
+          e.preventDefault();
+          triggerCymbal();
+        } else if (key === 'escape' || key === 's') {
+          e.preventDefault();
+          triggerStopAll();
+        }
+      });
+
+      // Initial Readiness update
+      updateButtonReadiness();
+    })();
+  </script>
+</body>
+</html>
