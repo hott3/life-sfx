@@ -264,6 +264,13 @@
             咄嗟の操作でも失敗しない超巨大ボタン設計に加え、記事の最後に著者が「キーボードで操作できればよかった」と言及していた要望を完全反映しました。
           </p>
         </div>
+
+        <div class="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+          <h4 class="font-bold text-indigo-900 mb-1">5. リアルな生音響物理モデリング音源</h4>
+          <p class="text-[11px] text-indigo-800">
+            電子音っぽさを完全排除し、実物のブロンズシンバルが激突する強烈な衝撃波（ガシャン！）と非整数倍音FM共鳴、およびコンサートスネアの高速打音（毎秒32回のバズロール＋スナッピー反発）をWeb Audio API上で数学的・物理的にリアルタイム合成しています。
+          </p>
+        </div>
       </div>
 
       <div class="pt-2 text-right">
@@ -414,127 +421,318 @@
         draw();
       }
 
-      // Web Audio Synthesizer: Snare Drumroll
-      // Generates an acoustic snare roll with rapid strokes and shell resonance
-      function createSynthDrumrollSource(ctx) {
-        // Master gain for this drumroll instance
-        const rollGain = ctx.createGain();
-        rollGain.gain.setValueAtTime(0.001, ctx.currentTime);
-        // Fast attack to full volume
-        rollGain.gain.exponentialRampToValueAtTime(0.9, ctx.currentTime + 0.05);
+      // Distortion curve helper for acoustic clash attack saturation
+      function makeDistortionCurve(amount) {
+        const k = amount;
+        const n_samples = 2048;
+        const curve = new Float32Array(n_samples);
+        const deg = Math.PI / 180;
+        for (let i = 0; i < n_samples; ++i) {
+          const x = (i * 2) / n_samples - 1;
+          curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+        }
+        return curve;
+      }
 
-        // 1. Noise generator for snare wire rattle
-        const bufferSize = ctx.sampleRate * 2;
-        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const output = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          output[i] = Math.random() * 2 - 1;
+      // Cached buffer for instant zero-latency drumroll start
+      let cachedSynthDrumrollBuffer = null;
+
+      // Pre-renders high-density acoustic snare buzz roll buffer
+      // Simulates rapid dual-stick strokes, micro-jitters, membrane resonance and snappy wire rattle
+      function generateAcousticDrumrollBuffer(ctx) {
+        const sampleRate = ctx.sampleRate;
+        const loopDuration = 3.0; // 3 seconds loop is imperceptibly seamless
+        const totalSamples = Math.floor(sampleRate * loopDuration);
+        const buffer = ctx.createBuffer(2, totalSamples, sampleRate);
+        const leftChannel = buffer.getChannelData(0);
+        const rightChannel = buffer.getChannelData(1);
+
+        const baseRate = 32.0; // 32 strokes per second (concert snare buzz roll)
+        const strokeInterval = 1.0 / baseRate;
+
+        let time = 0.0;
+        let hand = 0; // 0 = Left hand, 1 = Right hand
+
+        while (time < loopDuration) {
+          // Micro-timing jitter (humanization ±10%)
+          const jitter = (Math.random() - 0.5) * 0.20 * strokeInterval;
+          const actualTime = Math.max(0, time + jitter);
+          const startSample = Math.floor(actualTime * sampleRate);
+
+          // Alternating hand velocity difference
+          const handBias = hand === 0 ? 1.0 : 0.92;
+          const velocity = (0.75 + Math.random() * 0.25) * handBias;
+
+          // Duration of each micro buzz stroke (35ms ~ 55ms)
+          const strokeDurationSamples = Math.floor(sampleRate * (0.038 + Math.random() * 0.016));
+
+          // Fundamental pitch of drumhead per stroke (190Hz ~ 215Hz with natural micro-variations)
+          const fundamental = 200 + (Math.random() - 0.5) * 16;
+          const fundamentalRad = 2 * Math.PI * fundamental / sampleRate;
+
+          // Subtle stereo separation between left and right sticks
+          const pan = hand === 0 ? 0.44 : 0.56;
+
+          for (let s = 0; s < strokeDurationSamples; s++) {
+            const idx = startSample + s;
+            if (idx >= totalSamples) break;
+
+            // Exponential decay of the individual stroke
+            const env = Math.exp(-s / (sampleRate * 0.012));
+
+            // 1. Snare wire crisp rattle (snappy metal springs bouncing on bottom head)
+            const wireNoise = (Math.random() * 2 - 1) * env * 0.65;
+
+            // 2. Drum head membrane resonance with initial strike pitch drop
+            const pitchDrop = 1.0 + Math.exp(-s / (sampleRate * 0.003)) * 0.35;
+            const tone = Math.sin(s * fundamentalRad * pitchDrop) * Math.exp(-s / (sampleRate * 0.026)) * 0.38;
+
+            // 3. Wood stick tip impact transient (first 2ms click)
+            const click = s < sampleRate * 0.0025 ? (Math.random() * 2 - 1) * 0.55 : 0;
+
+            const sampleVal = (wireNoise + tone + click) * velocity;
+            leftChannel[idx] += sampleVal * (1.0 - pan);
+            rightChannel[idx] += sampleVal * pan;
+          }
+
+          time += strokeInterval;
+          hand = 1 - hand;
         }
 
-        const whiteNoise = ctx.createBufferSource();
-        whiteNoise.buffer = noiseBuffer;
-        whiteNoise.loop = true;
+        return buffer;
+      }
 
-        // Snare rattle filter (bandpass ~1800Hz)
-        const snareFilter = ctx.createBiquadFilter();
-        snareFilter.type = 'bandpass';
-        snareFilter.frequency.setValueAtTime(1800, ctx.currentTime);
-        snareFilter.Q.setValueAtTime(1.2, ctx.currentTime);
+      // Web Audio Synthesizer: Concert Snare Drumroll
+      // Generates an authentic concert snare buzz roll with granular stick strokes and shell resonance
+      function createSynthDrumrollSource(ctx) {
+        const now = ctx.currentTime;
 
-        // Tremolo / Drum stick stroke modulation (~22 Hz roll tempo)
-        const tremoloGain = ctx.createGain();
-        const lfo = ctx.createOscillator();
-        lfo.frequency.setValueAtTime(22, ctx.currentTime); // 22 strokes/sec
-        const lfoGain = ctx.createGain();
-        lfoGain.gain.setValueAtTime(0.35, ctx.currentTime);
-        lfo.connect(lfoGain);
-        lfoGain.connect(tremoloGain.gain);
+        // Master gain for this drumroll instance
+        const rollGain = ctx.createGain();
+        rollGain.gain.setValueAtTime(0.001, now);
+        // Fast musical swell to steady tension (80ms)
+        rollGain.gain.exponentialRampToValueAtTime(0.85, now + 0.08);
 
-        whiteNoise.connect(snareFilter);
-        snareFilter.connect(tremoloGain);
-        tremoloGain.connect(rollGain);
+        // Pre-generate or use cached authentic buzz-roll audio buffer
+        if (!cachedSynthDrumrollBuffer || cachedSynthDrumrollBuffer.sampleRate !== ctx.sampleRate) {
+          cachedSynthDrumrollBuffer = generateAcousticDrumrollBuffer(ctx);
+        }
 
-        // 2. Snare drum shell body resonance (~190Hz low punch)
-        const shellOsc = ctx.createOscillator();
-        shellOsc.type = 'triangle';
-        shellOsc.frequency.setValueAtTime(190, ctx.currentTime);
-        const shellGain = ctx.createGain();
-        shellGain.gain.setValueAtTime(0.25, ctx.currentTime);
+        const rollSource = ctx.createBufferSource();
+        rollSource.buffer = cachedSynthDrumrollBuffer;
+        rollSource.loop = true;
 
-        shellOsc.connect(shellGain);
-        shellGain.connect(rollGain);
+        // Snare drum acoustic filters:
+        // 1. Shell body warmth (~205Hz low-mid boost)
+        const bodyFilter = ctx.createBiquadFilter();
+        bodyFilter.type = 'peaking';
+        bodyFilter.frequency.setValueAtTime(205, now);
+        bodyFilter.Q.setValueAtTime(2.0, now);
+        bodyFilter.gain.setValueAtTime(5.0, now);
+
+        // 2. Snappy wire crispness (~3.6kHz presence boost)
+        const wireFilter = ctx.createBiquadFilter();
+        wireFilter.type = 'peaking';
+        wireFilter.frequency.setValueAtTime(3600, now);
+        wireFilter.Q.setValueAtTime(1.4, now);
+        wireFilter.gain.setValueAtTime(4.5, now);
+
+        // 3. Low-end cleanup (tightens the punch below 85Hz)
+        const lowcut = ctx.createBiquadFilter();
+        lowcut.type = 'highpass';
+        lowcut.frequency.setValueAtTime(85, now);
+
+        // 4. Performer dynamic breathing (subtle 0.8Hz wave in roll intensity ±5%)
+        const breathingLfo = ctx.createOscillator();
+        breathingLfo.frequency.setValueAtTime(0.8, now);
+        const breathingGain = ctx.createGain();
+        breathingGain.gain.setValueAtTime(0.05, now);
+        breathingLfo.connect(breathingGain);
+
+        const dynamicGain = ctx.createGain();
+        dynamicGain.gain.setValueAtTime(1.0, now);
+        breathingGain.connect(dynamicGain.gain);
+
+        rollSource.connect(lowcut);
+        lowcut.connect(bodyFilter);
+        bodyFilter.connect(wireFilter);
+        wireFilter.connect(dynamicGain);
+        dynamicGain.connect(rollGain);
 
         rollGain.connect(masterGainNode);
 
-        whiteNoise.start();
-        lfo.start();
-        shellOsc.start();
+        rollSource.start(now);
+        breathingLfo.start(now);
 
         return {
           gainNode: rollGain,
-          sources: [whiteNoise, lfo, shellOsc]
+          sources: [rollSource, breathingLfo]
         };
       }
 
-      // Web Audio Synthesizer: Crash Cymbal
-      // Realistic metallic crash burst with exponential acoustic decay
+      // Web Audio Synthesizer: Large Orchestral Clash & Crash Cymbal
+      // Physical modeling: High-impact clash transient + inharmonic FM metal modes + plate shimmer beating + 4.2s natural tail
       function playSynthCymbal(ctx) {
+        const now = ctx.currentTime;
+        const cymbalDuration = 4.2;
+
         const cymbalGain = ctx.createGain();
-        cymbalGain.gain.setValueAtTime(1.0, ctx.currentTime);
-        // Exponential decay over 3.0 seconds
-        cymbalGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 3.0);
-
-        // Metallic multi-oscillator cluster
-        const frequencies = [298.5, 342.3, 411.2, 543.8, 678.9, 834.1];
-        const oscGain = ctx.createGain();
-        oscGain.gain.setValueAtTime(0.4, ctx.currentTime);
-
-        const bandpass = ctx.createBiquadFilter();
-        bandpass.type = 'bandpass';
-        bandpass.frequency.setValueAtTime(7500, ctx.currentTime);
-        bandpass.Q.setValueAtTime(2.5, ctx.currentTime);
-
-        const sources = [];
-        frequencies.forEach(f => {
-          const osc = ctx.createOscillator();
-          osc.type = 'square';
-          osc.frequency.setValueAtTime(f, ctx.currentTime);
-          osc.connect(oscGain);
-          sources.push(osc);
-          osc.start();
-          osc.stop(ctx.currentTime + 3.2);
-        });
-
-        // High frequency noise burst
-        const bufferSize = ctx.sampleRate * 3;
-        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const output = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          output[i] = Math.random() * 2 - 1;
-        }
-
-        const noise = ctx.createBufferSource();
-        noise.buffer = noiseBuffer;
-
-        const highpass = ctx.createBiquadFilter();
-        highpass.type = 'highpass';
-        highpass.frequency.setValueAtTime(5000, ctx.currentTime);
-
-        noise.connect(highpass);
-        highpass.connect(cymbalGain);
-
-        oscGain.connect(bandpass);
-        bandpass.connect(cymbalGain);
-
+        cymbalGain.gain.setValueAtTime(1.0, now);
         cymbalGain.connect(masterGainNode);
 
-        noise.start();
-        noise.stop(ctx.currentTime + 3.2);
-        sources.push(noise);
+        const sources = [];
+
+        // ==========================================
+        // 1. Heavy Clash Impact Transient (ガシャン！という衝突アタック)
+        // ==========================================
+        const clashGain = ctx.createGain();
+        clashGain.gain.setValueAtTime(1.3, now);
+        clashGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+        // Initial burst noise (first 250ms)
+        const clashBufSize = Math.floor(ctx.sampleRate * 0.25);
+        const clashBuffer = ctx.createBuffer(1, clashBufSize, ctx.sampleRate);
+        const clashData = clashBuffer.getChannelData(0);
+        for (let i = 0; i < clashBufSize; i++) {
+          clashData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.045));
+        }
+
+        const clashNoise = ctx.createBufferSource();
+        clashNoise.buffer = clashBuffer;
+
+        // Heavy low-mid punch (320Hz - the physical weight of large bronze cymbals crashing)
+        const clashPunch = ctx.createBiquadFilter();
+        clashPunch.type = 'bandpass';
+        clashPunch.frequency.setValueAtTime(320, now);
+        clashPunch.Q.setValueAtTime(1.2, now);
+
+        // Sharp metallic explosion (3.8kHz)
+        const clashCrack = ctx.createBiquadFilter();
+        clashCrack.type = 'bandpass';
+        clashCrack.frequency.setValueAtTime(3800, now);
+        clashCrack.Q.setValueAtTime(1.5, now);
+
+        // Saturation waveshaper for explosive clash attack
+        const waveshaper = ctx.createWaveShaper();
+        waveshaper.curve = makeDistortionCurve(18);
+        waveshaper.oversample = '2x';
+
+        clashNoise.connect(waveshaper);
+        waveshaper.connect(clashPunch);
+        waveshaper.connect(clashCrack);
+        clashPunch.connect(clashGain);
+        clashCrack.connect(clashGain);
+        clashGain.connect(cymbalGain);
+
+        clashNoise.start(now);
+        clashNoise.stop(now + 0.25);
+        sources.push(clashNoise);
+
+        // ==========================================
+        // 2. Inharmonic FM Metal Resonator Cloud (ブロンズ金属の非整数倍音・複雑なモード共鳴)
+        // ==========================================
+        // Pairs of Sine oscillators with irrational FM ratios create realistic metal spectra without cheesy square waves
+        const carrierFreqs = [392, 547, 786, 1140, 1690, 2480, 3680];
+        const modRatios = [1.4142, 2.0811, 1.7320, 2.8284, 1.9416, 2.3784, 3.1415];
+
+        const metalGain = ctx.createGain();
+        metalGain.gain.setValueAtTime(0.75, now);
+        metalGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.6);
+
+        // Plate vibration beating (shimmer LFO 3.4Hz simulates the physical wobble of the cymbal in air)
+        const shimmerLfo = ctx.createOscillator();
+        shimmerLfo.frequency.setValueAtTime(3.4, now);
+        const shimmerLfoGain = ctx.createGain();
+        shimmerLfoGain.gain.setValueAtTime(0.18, now);
+        shimmerLfo.connect(shimmerLfoGain);
+
+        const metalPresence = ctx.createBiquadFilter();
+        metalPresence.type = 'peaking';
+        metalPresence.frequency.setValueAtTime(4200, now);
+        metalPresence.Q.setValueAtTime(1.2, now);
+        metalPresence.gain.setValueAtTime(4.0, now);
+
+        carrierFreqs.forEach((freq, idx) => {
+          const carrier = ctx.createOscillator();
+          carrier.type = 'sine';
+          carrier.frequency.setValueAtTime(freq, now);
+
+          const mod = ctx.createOscillator();
+          mod.type = 'sine';
+          mod.frequency.setValueAtTime(freq * modRatios[idx], now);
+
+          const modGain = ctx.createGain();
+          // High modulation index at attack (explosive inharmonicity), smoothing out to pure chime
+          modGain.gain.setValueAtTime(freq * 1.6, now);
+          modGain.gain.exponentialRampToValueAtTime(freq * 0.15, now + 1.8);
+
+          mod.connect(modGain);
+          modGain.connect(carrier.frequency);
+
+          const oscGain = ctx.createGain();
+          oscGain.gain.setValueAtTime(0.17 / Math.sqrt(idx + 1), now);
+
+          carrier.connect(oscGain);
+          oscGain.connect(metalGain);
+
+          carrier.start(now);
+          mod.start(now);
+          carrier.stop(now + 2.8);
+          mod.stop(now + 2.8);
+          sources.push(carrier, mod);
+        });
+
+        shimmerLfo.start(now);
+        shimmerLfo.stop(now + cymbalDuration);
+        sources.push(shimmerLfo);
+
+        metalGain.connect(metalPresence);
+        metalPresence.connect(cymbalGain);
+
+        // ==========================================
+        // 3. High-Frequency Air, Shimmer & 4.2s Long Sizzle Tail (空気感と高域の長い余韻)
+        // ==========================================
+        const tailBufSize = Math.floor(ctx.sampleRate * cymbalDuration);
+        const tailBuffer = ctx.createBuffer(1, tailBufSize, ctx.sampleRate);
+        const tailData = tailBuffer.getChannelData(0);
+        for (let i = 0; i < tailBufSize; i++) {
+          tailData[i] = Math.random() * 2 - 1;
+        }
+
+        const tailNoise = ctx.createBufferSource();
+        tailNoise.buffer = tailBuffer;
+
+        const tailHighpass = ctx.createBiquadFilter();
+        tailHighpass.type = 'highpass';
+        tailHighpass.frequency.setValueAtTime(5200, now);
+        tailHighpass.Q.setValueAtTime(1.6, now);
+
+        const tailPeak = ctx.createBiquadFilter();
+        tailPeak.type = 'peaking';
+        tailPeak.frequency.setValueAtTime(8400, now);
+        tailPeak.Q.setValueAtTime(2.5, now);
+        tailPeak.gain.setValueAtTime(5.5, now);
+
+        const tailGain = ctx.createGain();
+        tailGain.gain.setValueAtTime(0.85, now);
+        tailGain.gain.setValueAtTime(0.85, now + 0.08);
+        tailGain.gain.exponentialRampToValueAtTime(0.0001, now + cymbalDuration);
+
+        shimmerLfoGain.connect(tailGain.gain);
+
+        tailNoise.connect(tailHighpass);
+        tailHighpass.connect(tailPeak);
+        tailPeak.connect(tailGain);
+        tailGain.connect(cymbalGain);
+
+        tailNoise.start(now);
+        tailNoise.stop(now + cymbalDuration);
+        sources.push(tailNoise);
 
         return {
           gainNode: cymbalGain,
-          sources: sources
+          sources: sources,
+          duration: cymbalDuration
         };
       }
 
@@ -727,12 +925,13 @@
         cymbalStartTime = ctx.currentTime;
         btnCymbal.classList.add('ring-4', 'ring-rose-300');
 
-        let cymbalDuration = 3.0;
+        let cymbalDuration = 4.2;
 
         if (currentMode === 'synth') {
           const synth = playSynthCymbal(ctx);
           cymbalGainNode = synth.gainNode;
           cymbalSourceNodes = synth.sources;
+          cymbalDuration = synth.duration || 4.2;
         } else {
           const custom = playBufferAudio(ctx, customCymbalBuffer, false);
           cymbalGainNode = custom.gainNode;
